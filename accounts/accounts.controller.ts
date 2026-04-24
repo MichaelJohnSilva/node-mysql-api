@@ -114,12 +114,15 @@ async function authenticate(req: Request, res: Response, next: NextFunction) {
     try {
         const { email, password } = req.body;
         const { refreshToken, ...account } = await accountService.authenticate({ email, password });
+
+         console.log('REFRESH TOKEN FROM SERVICE:', refreshToken);
         res.cookie('refreshToken', refreshToken, { httpOnly: true, sameSite: 'strict' });
         res.json(account);
     } catch (error) {
         next(error);
     }
-}
+    
+}   
 
 async function register(req: Request, res: Response, next: NextFunction) {
     try {
@@ -171,8 +174,11 @@ async function verifyEmailPost(req: Request, res: Response, next: NextFunction) 
 async function forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
         const origin = getOrigin(req);
-        await accountService.forgotPassword(req.body.email, origin);
-        res.json({ message: 'Please check your email for password reset instructions' });
+        const result = await accountService.forgotPassword(req.body.email, origin);
+        res.json({ 
+            message: 'Please check your email for password reset instructions',
+            previewUrl: result.previewUrl 
+        });
     } catch (error) {
         next(error);
     }

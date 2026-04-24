@@ -101,13 +101,14 @@ async function verifyEmailByEmail(email: string) {
 
 async function forgotPassword(email: string, origin: string) {
     const account = await db.Account.findOne({ where: { email } });
-    if (!account) return;
+    if (!account) return {};
 
     account.resetToken = randomTokenString();
     account.resetTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await account.save();
 
-    await sendPasswordResetEmail(account, origin);
+    const previewUrl = await sendPasswordResetEmail(account, origin);
+    return { previewUrl };
 }
 
 async function resetPassword({ token, password }: { token: string; password: string }) {
@@ -174,12 +175,15 @@ async function createRefreshToken(accountId: string, ipAddress: string) {
     });
 }
 
-function createAccountResponse(account: any, refreshTokenString?: string) {
+async function createAccountResponse(account: any, refreshTokenString?: string) {
     const token = jwt.sign({ id: account.id }, config.secret, { expiresIn: '15m' });
-    const refreshToken = refreshTokenString || (async () => {
+
+    let refreshToken = refreshTokenString;
+
+    if (!refreshToken) {
         const rt = await createRefreshToken(account.id, 'unknown');
-        return rt.token;
-    })();
+        refreshToken = rt.token;
+    }
 
     return {
         id: account.id,
@@ -192,7 +196,7 @@ function createAccountResponse(account: any, refreshTokenString?: string) {
         updatedAt: account.updatedAt,
         isVerified: !account.verificationToken,
         jwtToken: token,
-        refreshToken: typeof refreshToken === 'string' ? refreshToken : refreshToken.then((rt: any) => rt.token)
+        refreshToken: refreshToken // ✅ ALWAYS STRING
     };
 }
 
@@ -213,7 +217,7 @@ async function sendVerificationEmail(account: any, origin: string) {
 async function sendPasswordResetEmail(account: any, origin: string) {
     const resetUrl = `${origin}/accounts/reset-password?token=${account.resetToken}`;
     const text = `Hi ${account.firstName || account.email},\n\nPlease reset your password by clicking the link below:\n\n${resetUrl}\n\nIf you didn't request a password reset, please ignore this email.`;
-    await sendEmail({
+    return await sendEmail({
         to: account.email,
         subject: 'Reset Password API',
         html: `<p>Hi ${account.firstName || account.email},</p><p>Please reset your password by clicking the link below:</p><p><a href="${resetUrl}">${resetUrl}</a></p><p>If you didn't request a password reset, please ignore this email.</p>`
