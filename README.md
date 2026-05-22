@@ -1,8 +1,8 @@
 # Node.js + TypeScript + MySQL API
 
 ## Live URLs
-- **Backend API:** https://your-backend.onrender.com
-- **Swagger Docs:** https://your-backend.onrender.com/api-docs
+- **Backend API:** https://node-mysql-api-t9ui.onrender.com
+- **Swagger Docs:** https://node-mysql-api-t9ui.onrender.com/api-docs
 
 ## Tech Stack
 Node.js · TypeScript · Express · Sequelize · MySQL (filess.io) · Mailtrap · JWT
@@ -18,7 +18,7 @@ npm install
 ```bash
 cp .env.example .env
 ```
-Fill in your filess.io database credentials and Mailtrap SMTP credentials..
+Fill in your filess.io database credentials and Mailtrap SMTP credentials.
 
 ### 3. Run dev server (port 3000)
 ```bash
@@ -35,7 +35,7 @@ npm run dev
 | `DB_PASSWORD` | Database password |
 | `DB_NAME` | Database name |
 | `JWT_SECRET` | Strong random secret for signing JWTs |
-| `CORS_ORIGIN` | Exact frontend URL (e.g. https://your-app.onrender.com) |
+| `CORS_ORIGIN` | Exact frontend URL (https://angular-21-boilerplate-0o8b.onrender.com) |
 | `COOKIE_SECURE` | Set `true` in production (HTTPS only) |
 | `SMTP_HOST` | Mailtrap SMTP host (`sandbox.smtp.mailtrap.io`) |
 | `SMTP_PORT` | Mailtrap SMTP port (`2525`) |

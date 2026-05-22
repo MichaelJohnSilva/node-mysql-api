@@ -7,7 +7,7 @@ import { accountService } from './account.service';
 
 const router = express.Router();
 
-// Cookie options — Secure flag + SameSite=None required in production (cross-origin)
+// Cookie options — Secure + SameSite=None required for cross-origin on Render
 const cookieOptions = () => ({
     httpOnly: true,
     secure: process.env.COOKIE_SECURE === 'true',
@@ -31,9 +31,9 @@ const registerSchema = Joi.object({
     acceptTerms: Joi.boolean().valid(true).required(),
 });
 
+// token is REQUIRED for the standard verify flow
 const verifyEmailSchema = Joi.object({
-    token: Joi.string().optional(),
-    email: Joi.string().email().optional(),
+    token: Joi.string().required(),
 });
 
 const forgotPasswordSchema = Joi.object({
@@ -56,8 +56,8 @@ const updateSchema = Joi.object({
 
 router.post('/authenticate', validateRequest(authenticateSchema), authenticate);
 router.post('/register', validateRequest(registerSchema), register);
-router.get('/verify-email', verifyEmailGet);
-router.post('/verify-email', validateRequest(verifyEmailSchema), verifyEmailPost);
+router.get('/verify-email', verifyEmailGet);   // GET — for direct email link clicks
+router.post('/verify-email', validateRequest(verifyEmailSchema), verifyEmailPost); // POST — from Angular
 router.post('/forgot-password', validateRequest(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', validateRequest(resetPasswordSchema), resetPassword);
 router.post('/refresh-token', refreshToken);
@@ -125,36 +125,33 @@ async function authenticate(req: Request, res: Response, next: NextFunction) {
 
 async function register(req: Request, res: Response, next: NextFunction) {
     try {
-        const result = await accountService.register(req.body, getOrigin(req));
+        await accountService.register(req.body, getOrigin(req));
         res.json({ message: 'Successfully registered, please check your email to verify your account' });
     } catch (error) {
         next(error);
     }
 }
 
+// GET handler — when user clicks the link directly in their email client
 async function verifyEmailGet(req: Request, res: Response, next: NextFunction) {
     try {
         const token = req.query.token as string;
         if (!token) return res.status(400).json({ message: 'Token is required' });
-        const account = await accountService.verifyEmail(token);
-        res.json({ message: 'Verification successful, you can now login', account });
+        await accountService.verifyEmail(token);
+        // Redirect to frontend login page after successful verification
+        const frontend = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:4000';
+        res.redirect(`${frontend}/account/login?verified=1`);
     } catch (error) {
         next(error);
     }
 }
 
+// POST handler — called by Angular verify-email component
 async function verifyEmailPost(req: Request, res: Response, next: NextFunction) {
     try {
-        const { token, email } = req.body;
-        if (token) {
-            const account = await accountService.verifyEmail(token);
-            return res.json({ message: 'Verification successful, you can now login', account });
-        }
-        if (email) {
-            const account = await accountService.verifyEmailByEmail(email);
-            return res.json({ message: 'Verification successful, you can now login', account });
-        }
-        next('Invalid request: either token or email must be provided');
+        const { token } = req.body;
+        await accountService.verifyEmail(token);
+        res.json({ message: 'Verification successful, you can now login' });
     } catch (error) {
         next(error);
     }
