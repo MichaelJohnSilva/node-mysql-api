@@ -7,6 +7,9 @@ import { Role } from '../_helpers/role';
 
 const jwtSecret = () => process.env.JWT_SECRET || 'REPLACE_WITH_STRONG_SECRET_FROM_ENV_IN_PRODUCTION';
 
+// Frontend URL for building email links — must be set in production
+const frontendUrl = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:4000';
+
 export const accountService = {
     authenticate,
     refreshToken,
@@ -66,15 +69,17 @@ async function register(params: any, origin: string) {
         verificationToken: randomTokenString()
     });
 
-    await sendVerificationEmail(account, origin);
+    await sendVerificationEmail(account);
     return { account: await createAccountResponse(account) };
 }
 
 async function verifyEmail(token: string) {
     const account = await db.Account.findOne({ where: { verificationToken: token } });
     if (!account) throw 'Invalid verification token';
-    account.verificationToken = undefined as any;
-    await account.save();
+
+    // Use null (not undefined) so Sequelize actually clears the column in the DB
+    await account.update({ verificationToken: null });
+
     return createAccountResponse(account);
 }
 
@@ -82,8 +87,9 @@ async function verifyEmailByEmail(email: string) {
     const account = await db.Account.findOne({ where: { email } });
     if (!account) throw 'Account not found';
     if (!account.verificationToken) throw 'Account already verified';
-    account.verificationToken = undefined as any;
-    await account.save();
+
+    await account.update({ verificationToken: null });
+
     return createAccountResponse(account);
 }
 
@@ -92,11 +98,11 @@ async function forgotPassword(email: string, origin: string) {
     // Return without error to prevent email enumeration
     if (!account) return;
 
-    account.resetToken = randomTokenString();
-    account.resetTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await account.save();
+    const resetToken = randomTokenString();
+    const resetTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await account.update({ resetToken, resetTokenExpires });
 
-    await sendPasswordResetEmail(account, origin);
+    await sendPasswordResetEmail(account);
 }
 
 async function resetPassword({ token, password }: { token: string; password: string }) {
@@ -177,8 +183,8 @@ function randomTokenString() {
     return crypto.randomBytes(40).toString('hex');
 }
 
-async function sendVerificationEmail(account: any, origin: string) {
-    const verifyUrl = `${origin}/account/verify-email?token=${account.verificationToken}`;
+async function sendVerificationEmail(account: any) {
+    const verifyUrl = `${frontendUrl()}/account/verify-email?token=${account.verificationToken}`;
     const name = account.title
         ? `${account.title} ${account.firstName || account.email}`
         : (account.firstName || account.email);
@@ -192,8 +198,8 @@ async function sendVerificationEmail(account: any, origin: string) {
     });
 }
 
-async function sendPasswordResetEmail(account: any, origin: string) {
-    const resetUrl = `${origin}/account/reset-password?token=${account.resetToken}`;
+async function sendPasswordResetEmail(account: any) {
+    const resetUrl = `${frontendUrl()}/account/reset-password?token=${account.resetToken}`;
     await sendEmail({
         to: account.email,
         subject: 'Reset Password',
