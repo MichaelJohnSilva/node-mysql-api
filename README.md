@@ -18,7 +18,7 @@ npm install
 ```bash
 cp .env.example .env
 ```
-Fill in your filess.io database credentials and Mailtrap SMTP credentials.
+Fill in your filess.io database credentials and Mailtrap SMTP credentials..
 
 ### 3. Run dev server (port 3000)
 ```bash
