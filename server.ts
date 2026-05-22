@@ -12,8 +12,16 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// allow cors requests from any origin and with credentials
-app.use(cors({ origin: (origin, callback) => callback(null, true), credentials: true }));
+// CORS — in production use the exact frontend origin set via CORS_ORIGIN env var
+const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:4000';
+app.use(cors({
+    origin: (origin, callback) => {
+        // allow requests with no origin (curl, Postman, Swagger UI same-origin)
+        if (!origin || origin === allowedOrigin) return callback(null, true);
+        callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true
+}));
 
 // api routes
 app.use('/accounts', accountsController);
@@ -24,6 +32,6 @@ app.use('/api-docs', swaggerDocs);
 // global error handler
 app.use(errorHandler);
 
-// start server
-const port = process.env.NODE_ENV === 'production' ? (process.env.PORT || 80) : 4000;
-app.listen(port, () => console.log('Server listening on port ' + port));
+// start server — dev uses port 3000 to avoid conflict with Angular (port 4000)
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`Server listening on port ${port}`));

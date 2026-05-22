@@ -42,7 +42,8 @@ export default function accountModel(sequelize: any) {
         verified: {
             type: DataTypes.VIRTUAL,
             get() {
-                return !!(this as any).getDataValue('verificationToken') === false;
+                // Returns true when verificationToken is null/undefined (account is verified)
+                return !(this as any).getDataValue('verificationToken');
             }
         },
         resetToken: {

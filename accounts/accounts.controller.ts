@@ -3,10 +3,18 @@ import Joi from 'joi';
 import db from '../_helpers/db';
 import { Role } from '../_helpers/role';
 import jwt from 'jsonwebtoken';
-import config from '../config.json';
 import { accountService } from './account.service';
 
 const router = express.Router();
+
+// Cookie options — Secure flag + SameSite=None required in production (cross-origin)
+const cookieOptions = () => ({
+    httpOnly: true,
+    secure: process.env.COOKIE_SECURE === 'true',
+    sameSite: (process.env.COOKIE_SECURE === 'true' ? 'none' : 'strict') as 'none' | 'strict'
+});
+
+const jwtSecret = () => process.env.JWT_SECRET || 'REPLACE_WITH_STRONG_SECRET_FROM_ENV_IN_PRODUCTION';
 
 const authenticateSchema = Joi.object({
     email: Joi.string().email().required(),
@@ -63,11 +71,7 @@ export default router;
 
 function validateRequest(schema: Joi.Schema) {
     return (req: Request, res: Response, next: NextFunction) => {
-        const options = {
-            abortEarly: false,
-            allowUnknown: true,
-            stripUnknown: true
-        };
+        const options = { abortEarly: false, allowUnknown: true, stripUnknown: true };
         const { error, value } = schema.validate(req.body, options);
         if (error) {
             next(`Validation error: ${error.details.map(x => x.message).join(', ')}`);
@@ -87,7 +91,7 @@ function authenticateMiddleware(roles: string[] = []): RequestHandler[] {
                     return res.status(401).json({ message: 'Unauthorized' });
                 }
                 const token = authHeader.split(' ')[1];
-                const decoded = jwt.verify(token, config.secret) as { id: string };
+                const decoded = jwt.verify(token, jwtSecret()) as { id: string };
                 (req as any).user = { id: decoded.id, role: '' };
                 next();
             } catch {
@@ -97,9 +101,7 @@ function authenticateMiddleware(roles: string[] = []): RequestHandler[] {
         (req: Request, res: Response, next: NextFunction) => {
             const user = (req as any).user;
             db.Account.findByPk(user.id).then((account: any) => {
-                if (!account) {
-                    return res.status(401).json({ message: 'Unauthorized' });
-                }
+                if (!account) return res.status(401).json({ message: 'Unauthorized' });
                 if (roles.length && !roles.includes(account.role)) {
                     return res.status(403).json({ message: 'Forbidden' });
                 }
@@ -114,23 +116,17 @@ async function authenticate(req: Request, res: Response, next: NextFunction) {
     try {
         const { email, password } = req.body;
         const { refreshToken, ...account } = await accountService.authenticate({ email, password });
-
-         console.log('REFRESH TOKEN FROM SERVICE:', refreshToken);
-        res.cookie('refreshToken', refreshToken, { httpOnly: true, sameSite: 'strict' });
+        res.cookie('refreshToken', refreshToken, cookieOptions());
         res.json(account);
     } catch (error) {
         next(error);
     }
-    
-}   
+}
 
 async function register(req: Request, res: Response, next: NextFunction) {
     try {
         const result = await accountService.register(req.body, getOrigin(req));
-        res.json({ 
-            message: 'Successfully registered',
-            previewUrl: result.previewUrl 
-        });
+        res.json({ message: 'Successfully registered, please check your email to verify your account' });
     } catch (error) {
         next(error);
     }
@@ -139,9 +135,7 @@ async function register(req: Request, res: Response, next: NextFunction) {
 async function verifyEmailGet(req: Request, res: Response, next: NextFunction) {
     try {
         const token = req.query.token as string;
-        if (!token) {
-            return res.status(400).json({ message: 'Token is required' });
-        }
+        if (!token) return res.status(400).json({ message: 'Token is required' });
         const account = await accountService.verifyEmail(token);
         res.json({ message: 'Verification successful, you can now login', account });
     } catch (error) {
@@ -152,19 +146,14 @@ async function verifyEmailGet(req: Request, res: Response, next: NextFunction) {
 async function verifyEmailPost(req: Request, res: Response, next: NextFunction) {
     try {
         const { token, email } = req.body;
-        
         if (token) {
-            // Public verification with token (standard user flow)
             const account = await accountService.verifyEmail(token);
             return res.json({ message: 'Verification successful, you can now login', account });
         }
-        
         if (email) {
-            // Admin verification by email (no auth required for simplicity)
             const account = await accountService.verifyEmailByEmail(email);
             return res.json({ message: 'Verification successful, you can now login', account });
         }
-        
         next('Invalid request: either token or email must be provided');
     } catch (error) {
         next(error);
@@ -173,12 +162,8 @@ async function verifyEmailPost(req: Request, res: Response, next: NextFunction) 
 
 async function forgotPassword(req: Request, res: Response, next: NextFunction) {
     try {
-        const origin = getOrigin(req);
-        const result = await accountService.forgotPassword(req.body.email, origin);
-        res.json({ 
-            message: 'Please check your email for password reset instructions',
-            previewUrl: result.previewUrl 
-        });
+        await accountService.forgotPassword(req.body.email, getOrigin(req));
+        res.json({ message: 'Please check your email for password reset instructions' });
     } catch (error) {
         next(error);
     }
@@ -197,7 +182,7 @@ async function refreshToken(req: Request, res: Response, next: NextFunction) {
     try {
         const token = req.cookies.refreshToken;
         const { refreshToken: newRefreshToken, ...account } = await accountService.refreshToken(token);
-        res.cookie('refreshToken', newRefreshToken, { httpOnly: true, sameSite: 'strict' });
+        res.cookie('refreshToken', newRefreshToken, cookieOptions());
         res.json(account);
     } catch (error) {
         next(error);
@@ -241,12 +226,7 @@ async function update(req: Request, res: Response, next: NextFunction) {
         const id = req.params.id as string;
         const reqUser = (req as any).user;
         if (reqUser?.role !== Role.Admin && reqUser?.id !== id) throw 'Unauthorized';
-        
-        // Non-admin users cannot modify role
-        if (reqUser?.role !== Role.Admin && req.body.role) {
-            throw 'Cannot modify role';
-        }
-        
+        if (reqUser?.role !== Role.Admin && req.body.role) throw 'Cannot modify role';
         const account = await accountService.update(id, req.body);
         res.json(account);
     } catch (error) {
@@ -267,5 +247,5 @@ async function _delete(req: Request, res: Response, next: NextFunction) {
 }
 
 function getOrigin(req: Request): string {
-    return `${req.protocol}://${req.get('host')}`;
+    return process.env.CORS_ORIGIN || `${req.protocol}://${req.get('host')}`;
 }

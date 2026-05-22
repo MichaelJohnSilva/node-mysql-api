@@ -1,44 +1,25 @@
 import nodemailer from 'nodemailer';
-import config from '../config.json';
-
-let testAccount: any;
-let previewUrl: string = '';
 
 export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
-    if (!testAccount) {
-        testAccount = await nodemailer.createTestAccount();
-        console.log('\n=== ETHEREAL EMAIL CONFIG ===');
-        console.log('Host: smtp.ethereal.email');
-        console.log('Port: 587');
-        console.log('User:', testAccount.user);
-        console.log('Pass:', testAccount.pass);
-        console.log('===========================\n');
-    }
-    
+    const host = process.env.SMTP_HOST || 'sandbox.smtp.mailtrap.io';
+    const port = parseInt(process.env.SMTP_PORT || '2525');
+    const user = process.env.SMTP_USER || '';
+    const pass = process.env.SMTP_PASS || '';
+    const from = process.env.EMAIL_FROM || 'noreply@my-node-api.com';
+
     const transport = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: {
-            user: testAccount.user,
-            pass: testAccount.pass
-        }
+        host,
+        port,
+        auth: { user, pass }
     });
 
-    const info = await transport.sendMail({
-        from: config.emailFrom,
-        to,
-        subject,
-        html
-    });
+    const info = await transport.sendMail({ from, to, subject, html });
 
-    previewUrl = nodemailer.getTestMessageUrl(info) || '';
-    console.log(`Email sent to ${to}`);
-    console.log(`Preview URL: ${previewUrl}\n`);
-    
-    return previewUrl;
+    console.log(`Email sent to ${to} | MessageId: ${info.messageId}`);
+    return info.messageId;
 }
 
-export function getPreviewUrl() {
-    return previewUrl;
+// kept for backward-compat (controllers call getPreviewUrl after register/forgotPassword)
+export function getPreviewUrl(): string {
+    return '';
 }
